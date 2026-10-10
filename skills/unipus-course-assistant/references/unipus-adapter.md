@@ -1,10 +1,10 @@
 # UMOOCs 已观察结构与适配方法
 
-这是课程 8021 在 2026-10-09 至 2026-10-10 的观察，属于适配线索。其他课程、开课轮次或平台更新需要现场核对。
+这是《英语语法与写作》（课程 ID：8021）在 2026-10-09 至 2026-10-10 的观察，属于适配线索。其他课程、开课轮次或平台更新需要现场核对。
 
 - 目录入口 `/my/course/<courseId>`；任务项 `li[id^="task_id_"]`，链接 `a.title`。视频类型曾由 `.right-menu i.es-icon-videoclass` 标识；状态位于 `.left-menu`。`es-icon-undone-check` 和 `es-icon-doing` 表示未完成，`es-icon-done-check` 等为完成。不能将某个绿色 class 在未知页面直接视为完成。
 - 任务页 `/course/<courseId>/task/<taskId>/show`，外层 `#task-content-iframe`，内容页 `activity_show`。实际视频在外层帧的 `#lesson-video-content iframe` 内，来源 `https://service-cdn.qiqiuyun.net/js-sdk/video-player/.../player.html`。
-- 不要由任务 ID 的数字规律猜测新课程类型。8021 采用 45 个核对后的固定视频 ID；资产脚本不适用于其他课程。
+- 不要由任务 ID 的数字规律猜测新课程类型。该课程采用 45 个核对后的固定视频 ID；资产脚本不适用于其他课程。
 - 考试说明页的“开始考试”链接曾为 `/lesson/<lessonId>/testpaper/<paperId>/do`。链接可能打开新标签。浏览器控制器需追踪新增页面，或从已观察 href 在同一标签导航一次；避免产生两份活动答题标签。
 - 开始后曾重定向至 `/testpaper/<attemptId>/show`，提交结果为 `/testpaper/result/<attemptId>/show`。普通作业可能使用 `/homework/...`。`attemptId` 是账号的本次尝试实例，不能迁移到其他账号。
 - 题目行 `.testpaper-question[id^="question"]`；题干 `.testpaper-question-stem`；文本字段 `input[data-type="fill"]`；判断题 `input[data-type="determine"]`，实测值 `1` 对应“正确”、`0` 对应“错误”。新试卷仍应读取标签和值验证。
