@@ -25,6 +25,8 @@ description: 在 UMOOCs/Unipus 网课中核对任务与尝试规则，制作真�
 
 ## 按单元分工
 
+首次启动默认展示勾选面板，而不是让用户编写分工文本。登录并确认账号/课程后、开始任何任务前，读取并按宿主允许的脚本写入方式执行 scripts/task-picker.js 的函数表达式，参数为 {courseId,courseName,scope?}。scope 只预填同账号已有明确分工；新账号不预选作业、测验或期末考。不要替用户点击确认。用户确认后以 {action:'read'} 读取 status:'confirmed' 的 scope，写入本地 task-scope.json；pending 时继续等待，不能猜测选择。支持分别勾选15个单元作业/测验，独立期末考、视频及通知恢复选项。视频与通知恢复默认勾选、可取消；用户确认前不据默认值执行修复。video.enabled 为 false 时不启动视频脚本。用户要求更改范围时以 {action:'reset',courseId,scope:当前分工} 重开；已开始的单次测试无法撤销。分工确认本身不替代未取得的开始/提交授权。不能注入页面时可展示 assets/task-picker.html；无法读取用户勾选结果时再用一次自然语言确认，不假称所有宿主都支持自动读取。
+
 依据用户的明确选择建立本地task-scope.json：普通作业homework与单元测验unitQuiz分别记录AI负责的单元数组，期末测验finalExam独立为ai/manual。未明确选择的项目默认manual。可从assets/task-scope.example.json建立；scripts/task-scope.js校验范围并给出每项decision。用户用自然语言指定U1–U5、U8或全部时由智能体展开，不能让用户逐项改JSON。账号或课程改变重新确认分工，文件本身不是授权证据。
 
 每次进入、开始或提交作业/测验前检查实时分工，只有decision为ai且用户已授权开始/提交才操作。manual项目不进入答题页面，保留目录状态供汇总。未识别单元/类型或错误范围停止该项；不凭顺序猜测期末考属于某单元。用户可更改未开始任务范围，遇到活动中的计时测试说明已开始状态，不假称可撤销机会。续接沿用同账号已明确授权；用户更改优先于配置文件。
@@ -67,4 +69,5 @@ description: 在 UMOOCs/Unipus 网课中核对任务与尝试规则，制作真�
 
 历史效果和迁移边界见 [references/verified-case.md](references/verified-case.md)；仅需评估适用性时读取。
 首次使用路径测试与现场迁移结果见 [references/validation.md](references/validation.md)；调试或评估可靠性时读取。
+
 
