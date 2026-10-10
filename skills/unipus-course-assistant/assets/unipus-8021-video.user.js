@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         UMOOCs 英语语法与写作 视频连续播放（仅真实观看）
+// @name         UMOOCs 英语语法与写作 视频连续播放
 // @namespace    local.codex.unipus.8021
-// @version      1.1.0
-// @description  以真实 4 倍速播放视频，服务器确认完成后跳到下一未完成视频；倍速未获确认时原速重播。
+// @version      1.4.0
+// @description  静音、最低清晰度，选择末尾三秒或完整倍速播放；服务器确认完成后串播，未获确认时原速重播。
 // @match        https://moocs.unipus.cn/my/course/8021*
 // @match        https://moocs.unipus.cn/course/8021/task/*/show*
 // @match        https://moocs.unipus.cn/course/8021/task/*/activity_show*
@@ -20,7 +20,9 @@ const runUnipus8021Video = () => {
   const PLAYER_ORIGIN = 'https://service-cdn.qiqiuyun.net';
   const COURSE_URL = `${COURSE_ORIGIN}/my/course/8021`;
   const ENABLE_KEY = `${TAG}:enabled`;
-  const FAST_RATE = 4;
+  const preferredRate = Number(localStorage.getItem(`${TAG}:preferred-rate`));
+  let FAST_RATE = [1, 4, 8, 16].includes(preferredRate) ? preferredRate : 16;
+  const seekMode = localStorage.getItem(`${TAG}:mode`) !== 'play';
   const fallbackKey = id => `${TAG}:normal-replay:${id}`;
   // 2026-10-09 已登录目录核对：15 个单元，每单元 3 个视频。
   const VIDEO_IDS = new Set(Array.from({ length: 15 }, (_, unit) =>
@@ -38,6 +40,15 @@ const runUnipus8021Video = () => {
     let taskId = null;
     let requestedRate = 1;
     let replayFromStart = false;
+    let seekToEnd = false;
+    let videoElement = null;
+    const changeRate = rate => {
+      requestedRate = rate;
+      if (!videoElement) return;
+      videoElement.muted = true;
+      try { videoElement.playbackRate = rate; } catch {}
+      send('rate', { requested: rate, actual: videoElement.playbackRate });
+    };
 
     const send = (type, detail = {}) => {
       window.top.postMessage({ tag: TAG, type, taskId, ...detail }, COURSE_ORIGIN);
@@ -49,11 +60,40 @@ const runUnipus8021Video = () => {
       const video = document.querySelector('video');
       if (!video) return;
       attached = true;
+      videoElement = video;
+      video.muted = true;
+      const preferLowestQuality = () => {
+        const items = [...document.querySelectorAll('.vjs-plugin-resolution .vjs-menu-item')];
+        const lowest = ['流畅', '标清'].map(label => items.find(n => n.textContent.trim() === label)).find(Boolean);
+        if (!lowest || lowest.getAttribute('aria-disabled') === 'true') return;
+        const current = document.querySelector('.resolution-switcher-btn-value')?.textContent.trim();
+        if (current !== lowest.textContent.trim()) lowest.click();
+      };
+      setTimeout(preferLowestQuality, 1000);
+      // 等待元数据与清晰度切换完成；每次页面加载最多跳转一次。
+      let seekAttempted = false;
+      const seekTimer = setInterval(() => {
+        if (!seekToEnd || replayFromStart || seekAttempted || video.ended) return;
+        if (video.readyState < 2 || !Number.isFinite(video.duration) || video.duration <= 3) return;
+        seekAttempted = true;
+        try {
+          requestedRate = 1;
+          video.playbackRate = 1;
+          video.currentTime = Math.max(0, video.duration - 3);
+          send('seek', { seconds: video.currentTime });
+          video.play().catch(() => send('attention', {reason:'末尾播放被阻止，请点击播放器。'}));
+        } catch {
+          send('attention', {reason:'本节不能跳转，继续正常播放并核验完成状态。'});
+        }
+        clearInterval(seekTimer);
+      }, 3000);
+      setTimeout(() => clearInterval(seekTimer), 30000);
       let waitingTimer = null;
       let pauseTimer = null;
       let hasPlayed = false;
       let lastReportedMinute = -1;
       const applyRate = () => {
+        video.muted = true;
         try {
           video.playbackRate = requestedRate;
           setTimeout(() => send('rate', {
@@ -112,13 +152,19 @@ const runUnipus8021Video = () => {
     };
     window.addEventListener('message', event => {
       if (event.origin !== COURSE_ORIGIN || event.source !== window.top ||
-          event.data?.tag !== TAG || event.data.type !== 'attach' ||
+          event.data?.tag !== TAG || !['attach','set-rate'].includes(event.data.type) ||
           !VIDEO_IDS.has(String(event.data.taskId))) return;
+      if (event.data.type === 'set-rate') {
+        if (initialized && String(event.data.taskId) === taskId && [1,4,8,16].includes(event.data.rate))
+          changeRate(event.data.rate);
+        return;
+      }
       if (initialized) return;
       initialized = true;
       taskId = String(event.data.taskId);
-      requestedRate = event.data.rate === FAST_RATE ? FAST_RATE : 1;
+      requestedRate = [1, 4, 8, 16].includes(event.data.rate) ? event.data.rate : 1;
       replayFromStart = event.data.replayFromStart === true;
+      seekToEnd = event.data.seekToEnd === true;
       attach();
       const observer = new MutationObserver(attach);
       observer.observe(document.documentElement, { childList: true, subtree: true });
@@ -134,26 +180,59 @@ const runUnipus8021Video = () => {
   if (location.origin !== COURSE_ORIGIN || window !== window.top) return;
   const isCoursePage = location.pathname === '/my/course/8021';
   const taskId = videoTaskId(location.pathname);
-  if (!isCoursePage && (!taskId || !location.pathname.endsWith('/show'))) return;
+  if (!isCoursePage && (!taskId || !VIDEO_IDS.has(taskId) || !location.pathname.endsWith('/show'))) return;
 
   const panel = document.createElement('div');
   panel.id = 'codex-unipus-video-status';
   Object.assign(panel.style, {
     position: 'fixed', right: '16px', bottom: '16px', zIndex: '2147483647',
     background: '#14213d', color: '#fff', padding: '10px 12px', borderRadius: '8px',
-    maxWidth: '360px', font: '14px/1.5 system-ui, sans-serif', boxShadow: '0 3px 15px #0005',
+    maxWidth: '480px', font: '14px/1.5 system-ui, sans-serif', boxShadow: '0 3px 15px #0005',
+    display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '8px',
   });
   const label = document.createElement('span');
   const toggle = document.createElement('button');
-  Object.assign(toggle.style, { marginLeft: '10px', cursor: 'pointer', border: '0', borderRadius: '4px', padding: '3px 7px' });
-  panel.append(label, toggle);
+  toggle.type = 'button';
+  Object.assign(toggle.style, { cursor: 'pointer', border: '0', borderRadius: '5px', padding: '6px 10px',
+    background: '#fbbf24', color: '#111827', fontWeight: '700', fontSize: '14px', opacity: '1' });
+  const speed = document.createElement('select');
+  speed.setAttribute('aria-label', '播放倍速');
+  speed.title = '选择真实播放速度';
+  for (const rate of [1,4,8,16]) {
+    const option = document.createElement('option');
+    option.value = String(rate); option.textContent = `${rate}×`;
+    speed.append(option);
+  }
+  speed.value = String(FAST_RATE);
+  Object.assign(speed.style, { background: '#fff', color: '#111827', border: '1px solid #cbd5e1',
+    borderRadius: '5px', padding: '5px 7px', fontWeight: '700', fontSize: '14px', cursor: 'pointer' });
+  speed.addEventListener('change', () => {
+    FAST_RATE = Number(speed.value);
+    localStorage.setItem(`${TAG}:preferred-rate`, String(FAST_RATE));
+    const inner = document.querySelector('#task-content-iframe')?.contentDocument?.querySelector('#lesson-video-content iframe');
+    inner?.contentWindow?.postMessage({tag:TAG,type:'set-rate',taskId,rate:FAST_RATE},PLAYER_ORIGIN);
+  });
+  const mode = document.createElement('select');
+  mode.setAttribute('aria-label', '视频处理方式');
+  mode.style.cssText = speed.style.cssText;
+  for (const [value, text] of [['seek','末尾三秒'],['play','完整播放']]) {
+    const option = document.createElement('option');
+    option.value = value; option.textContent = text; mode.append(option);
+  }
+  mode.value = seekMode ? 'seek' : 'play';
+  mode.addEventListener('change', () => {
+    localStorage.setItem(`${TAG}:mode`, mode.value);
+    location.reload();
+  });
+  panel.append(label, mode, speed, toggle);
   document.body.append(panel);
   const setStatus = text => { label.textContent = `视频助手：${text}`; };
   const renderToggle = () => { toggle.textContent = enabled() ? '暂停串播' : '继续串播'; };
   toggle.addEventListener('click', () => {
     localStorage.setItem(ENABLE_KEY, enabled() ? '0' : '1');
     renderToggle();
-    setStatus(enabled() ? '已启用，刷新页面即可继续' : '已暂停');
+    setStatus(enabled() ? '正在恢复串播' : '已暂停串播，当前视频可继续播放');
+    if (enabled()) location.reload();
   });
   renderToggle();
   if (!enabled()) { setStatus('已暂停'); return; }
@@ -171,7 +250,7 @@ const runUnipus8021Video = () => {
     const doc = new DOMParser().parseFromString(await response.text(), 'text/html');
     const tasks = [...doc.querySelectorAll('li[id^="task_id_"]')].map(item => {
       const id = item.id.replace('task_id_', '');
-      const icon = item.querySelector('.left-menu');
+      const icon = item.querySelector('.left-menu i') || item.querySelector('.left-menu');
       const typeIcon = item.querySelector('.right-menu i');
       const link = item.querySelector('a.title')?.getAttribute('href') || '';
       return { id, type: typeIcon?.classList.contains('es-icon-videoclass') ? 'video' : 'other',
@@ -179,6 +258,13 @@ const runUnipus8021Video = () => {
     });
     if (tasks.length < 45 || tasks.filter(t => t.type === 'video').length < 45)
       throw new Error('目录结构与已核对版本不一致，已停止自动跳转');
+    for (const id of VIDEO_IDS) {
+      const matches = tasks.filter(task => task.id === id);
+      if (matches.length !== 1 || matches[0].type !== 'video' ||
+          matches[0].link !== `/course/8021/task/${id}/show` ||
+          !['pending','done'].includes(matches[0].status))
+        throw new Error(`视频 ${id} 的类型、链接或完成状态无法确认，已停止`);
+    }
     return tasks;
   };
   const validVideo = task => task && task.type === 'video' && VIDEO_IDS.has(task.id) &&
@@ -212,6 +298,12 @@ const runUnipus8021Video = () => {
   let advancing = false;
   let actualRate = 1;
   const normalReplay = sessionStorage.getItem(fallbackKey(taskId)) === '1';
+  if (normalReplay) {
+    mode.value = 'play'; mode.disabled = true;
+    speed.value = '1'; speed.disabled = true;
+    speed.title = '本节正在原速重播以核验服务器完成条件';
+  }
+  let catalogReady = false;
   const verifyAndAdvance = async () => {
     if (advancing || !enabled()) return;
     advancing = true;
@@ -233,7 +325,7 @@ const runUnipus8021Video = () => {
       }
       if (!normalReplay) {
         sessionStorage.setItem(fallbackKey(taskId), '1');
-        setStatus('倍速播放未获完成确认，重新以原速观看本节');
+        setStatus('播放未获完成确认，重新以原速观看本节');
         location.reload();
       } else {
         stopWith('原速播放结束后服务器仍未确认完成；请检查弹题或进度。');
@@ -245,9 +337,11 @@ const runUnipus8021Video = () => {
   const playerFrame = () => document.querySelector('#task-content-iframe')
     ?.contentDocument?.querySelector('#lesson-video-content iframe');
   const sendAttach = () => {
+    if (!catalogReady || !enabled()) return;
     const inner = playerFrame();
     inner?.contentWindow?.postMessage({ tag: TAG, type: 'attach', taskId,
-      rate: normalReplay ? 1 : FAST_RATE, replayFromStart: normalReplay }, PLAYER_ORIGIN);
+      rate: normalReplay ? 1 : FAST_RATE, replayFromStart: normalReplay,
+      seekToEnd: seekMode && !normalReplay }, PLAYER_ORIGIN);
   };
   window.addEventListener('message', event => {
     if (event.origin !== PLAYER_ORIGIN || event.data?.tag !== TAG) return;
@@ -260,16 +354,14 @@ const runUnipus8021Video = () => {
       actualRate = event.data.actual;
       if (actualRate !== event.data.requested && event.data.requested > 1)
         setStatus(`播放器限制倍速，按实际 ${actualRate}× 播放`);
+    } else if (event.data.type === 'seek') {
+      actualRate = 1;
+      setStatus('已跳到末尾三秒，等待自然结束与目录确认');
     } else if (event.data.type === 'playing' || event.data.type === 'progress')
       setStatus(`正在以 ${actualRate}× 播放，第 ${Math.floor(event.data.seconds / 60)} 分钟`);
     else if (event.data.type === 'attention') stopWith(event.data.reason);
     else if (event.data.type === 'ended') verifyAndAdvance();
   });
-  let handshakeAttempts = 0;
-  const handshakeTimer = setInterval(() => {
-    if (++handshakeAttempts > 15) { clearInterval(handshakeTimer); return; }
-    sendAttach();
-  }, 2000);
   readCatalog().then(tasks => {
     const current = tasks.find(t => t.id === taskId);
     if (!validVideo(current)) stopWith('当前是作业或考试，视频助手不操作');
@@ -277,7 +369,15 @@ const runUnipus8021Video = () => {
       const next = nextPending(tasks, taskId);
       if (next) navigate(next);
       else stopWith('没有未完成视频');
-    } else if (current.status === 'unknown') stopWith('当前进度状态无法识别');
+    } else if (current.status === 'pending') {
+      catalogReady = true;
+      sendAttach();
+      let handshakeAttempts = 0;
+      const handshakeTimer = setInterval(() => {
+        if (++handshakeAttempts > 15) { clearInterval(handshakeTimer); return; }
+        sendAttach();
+      }, 2000);
+    } else stopWith('当前进度状态无法识别');
   }).catch(error => stopWith(error.message));
 };
 if (document.readyState === 'loading')
