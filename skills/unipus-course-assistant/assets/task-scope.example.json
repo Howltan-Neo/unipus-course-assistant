@@ -4,5 +4,5 @@
   "homework": { "aiUnits": [] },
   "unitQuiz": { "aiUnits": [] },
   "finalExam": "manual",
-  "repairNativeNotifications": false
+  "repairNativeNotifications": true
 }
