@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         UMOOCs 英语语法与写作 视频连续播放
 // @namespace    local.codex.unipus.8021
-// @version      1.4.0
-// @description  静音、最低清晰度，选择末尾三秒或完整倍速播放；服务器确认完成后串播，未获确认时原速重播。
+// @version      1.4.1
+// @description  静音、最低清晰度，优先末尾三秒；未确认完成则16×完整播放，服务器确认后串播。
 // @match        https://moocs.unipus.cn/my/course/8021*
 // @match        https://moocs.unipus.cn/course/8021/task/*/show*
 // @match        https://moocs.unipus.cn/course/8021/task/*/activity_show*
@@ -83,7 +83,7 @@ const runUnipus8021Video = () => {
           send('seek', { seconds: video.currentTime });
           video.play().catch(() => send('attention', {reason:'末尾播放被阻止，请点击播放器。'}));
         } catch {
-          send('attention', {reason:'本节不能跳转，继续正常播放并核验完成状态。'});
+          send('seek-failed');
         }
         clearInterval(seekTimer);
       }, 3000);
@@ -298,10 +298,11 @@ const runUnipus8021Video = () => {
   let advancing = false;
   let actualRate = 1;
   const normalReplay = sessionStorage.getItem(fallbackKey(taskId)) === '1';
-  if (normalReplay) {
+  const fastReplay = sessionStorage.getItem(fallbackKey(taskId)) === '16';
+  if (normalReplay || fastReplay) {
     mode.value = 'play'; mode.disabled = true;
-    speed.value = '1'; speed.disabled = true;
-    speed.title = '本节正在原速重播以核验服务器完成条件';
+    speed.value = normalReplay ? '1' : '16'; speed.disabled = true;
+    speed.title = '本节正在从头完整播放以核验服务器完成条件';
   }
   let catalogReady = false;
   const verifyAndAdvance = async () => {
@@ -323,7 +324,11 @@ const runUnipus8021Video = () => {
         setStatus(`视频结束，等待服务器确认完成（${attempt + 1}/12）`);
         await new Promise(resolve => setTimeout(resolve, 10000));
       }
-      if (!normalReplay) {
+      if (!normalReplay && !fastReplay) {
+        sessionStorage.setItem(fallbackKey(taskId), '16');
+        setStatus('未获完成确认，重新以16×完整播放本节');
+        location.reload();
+      } else if (fastReplay) {
         sessionStorage.setItem(fallbackKey(taskId), '1');
         setStatus('播放未获完成确认，重新以原速观看本节');
         location.reload();
@@ -340,8 +345,9 @@ const runUnipus8021Video = () => {
     if (!catalogReady || !enabled()) return;
     const inner = playerFrame();
     inner?.contentWindow?.postMessage({ tag: TAG, type: 'attach', taskId,
-      rate: normalReplay ? 1 : FAST_RATE, replayFromStart: normalReplay,
-      seekToEnd: seekMode && !normalReplay }, PLAYER_ORIGIN);
+      rate: normalReplay ? 1 : fastReplay ? 16 : FAST_RATE,
+      replayFromStart: normalReplay || fastReplay,
+      seekToEnd: seekMode && !normalReplay && !fastReplay }, PLAYER_ORIGIN);
   };
   window.addEventListener('message', event => {
     if (event.origin !== PLAYER_ORIGIN || event.data?.tag !== TAG) return;
@@ -354,6 +360,11 @@ const runUnipus8021Video = () => {
       actualRate = event.data.actual;
       if (actualRate !== event.data.requested && event.data.requested > 1)
         setStatus(`播放器限制倍速，按实际 ${actualRate}× 播放`);
+    } else if (event.data.type === 'seek-failed') {
+      if (!enabled() || normalReplay || fastReplay) return;
+      sessionStorage.setItem(fallbackKey(taskId), '16');
+      setStatus('跳转失败，改为16×从头完整播放');
+      location.reload();
     } else if (event.data.type === 'seek') {
       actualRate = 1;
       setStatus('已跳到末尾三秒，等待自然结束与目录确认');
