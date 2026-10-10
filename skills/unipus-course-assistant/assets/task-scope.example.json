@@ -3,5 +3,6 @@
   "courseId": "8021",
   "homework": { "aiUnits": [] },
   "unitQuiz": { "aiUnits": [] },
-  "finalExam": "manual"
+  "finalExam": "manual",
+  "repairNativeNotifications": false
 }
