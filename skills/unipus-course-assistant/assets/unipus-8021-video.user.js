@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         UMOOCs 英语语法与写作 视频连续播放
 // @namespace    local.codex.unipus.8021
-// @version      1.4.1
+// @version      1.4.2
 // @description  静音、最低清晰度，优先末尾三秒；未确认完成则16×完整播放，服务器确认后串播。
 // @match        https://moocs.unipus.cn/my/course/8021*
 // @match        https://moocs.unipus.cn/course/8021/task/*/show*
@@ -191,6 +191,14 @@ const runUnipus8021Video = () => {
     display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '8px',
   });
   const label = document.createElement('span');
+  const dragHandle = document.createElement('button');
+  dragHandle.type = 'button';
+  dragHandle.textContent = '⋮⋮';
+  dragHandle.setAttribute('aria-label', '拖动视频助手');
+  dragHandle.title = '拖动调整位置；方向键也可移动';
+  Object.assign(dragHandle.style, { cursor: 'grab', touchAction: 'none', userSelect: 'none',
+    background: 'transparent', color: '#fff', border: '1px solid #64748b',
+    borderRadius: '4px', padding: '2px 6px', fontSize: '18px' });
   const toggle = document.createElement('button');
   toggle.type = 'button';
   Object.assign(toggle.style, { cursor: 'pointer', border: '0', borderRadius: '5px', padding: '6px 10px',
@@ -224,9 +232,56 @@ const runUnipus8021Video = () => {
     localStorage.setItem(`${TAG}:mode`, mode.value);
     location.reload();
   });
-  panel.append(label, mode, speed, toggle);
+  panel.append(dragHandle, label, mode, speed, toggle);
   document.body.append(panel);
-  const setStatus = text => { label.textContent = `视频助手：${text}`; };
+  panel.style.maxWidth = 'min(480px, calc(100vw - 32px))';
+  panel.style.boxSizing = 'border-box';
+  const positionKey = `${TAG}:panel-position`;
+  const positionPanel = (x, y, save = false) => {
+    const rect = panel.getBoundingClientRect();
+    const left = Math.max(0, Math.min(x, window.innerWidth - rect.width));
+    const top = Math.max(0, Math.min(y, window.innerHeight - rect.height));
+    Object.assign(panel.style, {left:`${left}px`, top:`${top}px`, right:'auto', bottom:'auto'});
+    if (save) localStorage.setItem(positionKey, JSON.stringify({x:left,y:top}));
+  };
+  try {
+    const savedPosition = JSON.parse(localStorage.getItem(positionKey));
+    if (savedPosition && Number.isFinite(savedPosition.x) && Number.isFinite(savedPosition.y))
+      requestAnimationFrame(() => positionPanel(savedPosition.x, savedPosition.y));
+  } catch {}
+  let drag = null;
+  dragHandle.addEventListener('pointerdown', event => {
+    if (event.button !== 0) return;
+    const rect = panel.getBoundingClientRect();
+    drag = {id:event.pointerId, dx:event.clientX-rect.left, dy:event.clientY-rect.top};
+    dragHandle.setPointerCapture(event.pointerId);
+    dragHandle.style.cursor = 'grabbing'; event.preventDefault();
+  });
+  dragHandle.addEventListener('pointermove', event => {
+    if (drag?.id === event.pointerId) positionPanel(event.clientX-drag.dx,event.clientY-drag.dy);
+  });
+  const finishDrag = event => {
+    if (drag?.id !== event.pointerId) return;
+    const rect = panel.getBoundingClientRect(); positionPanel(rect.left,rect.top,true);
+    drag = null; dragHandle.style.cursor = 'grab';
+    if (dragHandle.hasPointerCapture(event.pointerId)) dragHandle.releasePointerCapture(event.pointerId);
+  };
+  for (const name of ['pointerup','pointercancel','lostpointercapture']) dragHandle.addEventListener(name,finishDrag);
+  dragHandle.addEventListener('keydown', event => {
+    const offsets = {ArrowLeft:[-10,0],ArrowRight:[10,0],ArrowUp:[0,-10],ArrowDown:[0,10]};
+    if (!offsets[event.key]) return;
+    event.preventDefault(); const rect=panel.getBoundingClientRect(); const [dx,dy]=offsets[event.key];
+    positionPanel(rect.left+dx,rect.top+dy,true);
+  });
+  window.addEventListener('resize', () => {
+    const rect=panel.getBoundingClientRect(); positionPanel(rect.left,rect.top,true);
+  });
+  const setStatus = text => {
+    label.textContent = `视频助手：${text}`;
+    if (panel.style.left) requestAnimationFrame(() => {
+      const rect=panel.getBoundingClientRect(); positionPanel(rect.left,rect.top);
+    });
+  };
   const renderToggle = () => { toggle.textContent = enabled() ? '暂停串播' : '继续串播'; };
   toggle.addEventListener('click', () => {
     localStorage.setItem(ENABLE_KEY, enabled() ? '0' : '1');
