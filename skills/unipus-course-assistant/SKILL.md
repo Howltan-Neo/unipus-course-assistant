@@ -31,7 +31,7 @@ description: 在 UMOOCs/Unipus 网课中核对任务与尝试规则，制作真�
 
 让脚本负责播放、结束后确认、跳过已完成、下一视频、页面恢复和异常提示。倍速未获确认时可实际原速重播；原速仍不确认就停留提示。不要无限重试弹题、自动点击身份验证或绕过播放限制。稳定运行后停止模型持续轮询；用浏览器内计时器和状态栏承担监测。
 
-仅处理原课程 8021 时可参考 [assets/unipus-8021-video.user.js](assets/unipus-8021-video.user.js)。新课程先读 [references/unipus-adapter.md](references/unipus-adapter.md)，重新生成任务白名单和匹配范围。
+处理《英语语法与写作》（课程 ID：8021）时可参考 [assets/unipus-8021-video.user.js](assets/unipus-8021-video.user.js)。新课程先读 [references/unipus-adapter.md](references/unipus-adapter.md)，重新生成任务白名单和匹配范围。
 
 ## 解答、填入、提交
 
