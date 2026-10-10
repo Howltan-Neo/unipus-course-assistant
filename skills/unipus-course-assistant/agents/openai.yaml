@@ -1,0 +1,4 @@
+interface:
+  display_name: "UMOOCs 课程助手"
+  short_description: "核对课程规则，持续真实视频播放，复核授权作答并验证提交结果"
+  default_prompt: "使用 $unipus-course-assistant 协助处理指定 UMOOCs 课程，先核对账号、任务范围及尝试规则，再继续已授权的工作。"
