@@ -1,0 +1,11 @@
+# Local sessions and private course data
+work/
+runtime/
+*.log
+*profile*/
+*snapshot*.json
+answers*.json
+progress*.json
+.env
+.env.*
+__pycache__/
