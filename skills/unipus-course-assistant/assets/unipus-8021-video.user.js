@@ -1,5 +1,5 @@
 // ==UserScript==
-// @name         UMOOCs 8021 视频连续播放（仅真实观看）
+// @name         UMOOCs 英语语法与写作 视频连续播放（仅真实观看）
 // @namespace    local.codex.unipus.8021
 // @version      1.1.0
 // @description  以真实 4 倍速播放视频，服务器确认完成后跳到下一未完成视频；倍速未获确认时原速重播。
@@ -195,7 +195,7 @@ const runUnipus8021Video = () => {
   };
   const stopWith = reason => {
     setStatus(reason);
-    console.warn('[UMOOCs 8021 视频助手]', reason);
+    console.warn('[UMOOCs 英语语法与写作 视频助手]', reason);
   };
 
   if (isCoursePage) {
