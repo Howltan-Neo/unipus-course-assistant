@@ -5,9 +5,9 @@
   const fieldSelector = request.fieldSelector || 'input[data-type]:not([type="hidden"]),textarea[data-type]';
   const rows = [...document.querySelectorAll(rowSelector)];
   const fields = row => [...row.querySelectorAll(fieldSelector)].filter(n => n.type !== 'hidden');
-  const signature = n => ({ name:n.name, type:n.type, dataType:n.getAttribute('data-type'),
+  const signature = n => ({ id:n.id, name:n.name, type:n.type, dataType:n.getAttribute('data-type'),
     option:['radio','checkbox'].includes(n.type) ? n.value : null });
-  const schema = rows.map(row => ({id:row.id,fields:fields(row).map(signature)}));
+  const schema = rows.map(row => ({id:row.id,text:row.innerText,fields:fields(row).map(signature)}));
   const readValues = row => {
     const nodes = fields(row);
     return nodes.every(n => ['radio','checkbox'].includes(n.type))
@@ -21,6 +21,7 @@
     return {url:location.href,title:document.title,questionCount:rows.length,schema,
       material:material?.slice(0,limit) ?? null,materialTruncated:!!material && material.length > limit,
       questions:rows.map((row,i) => ({number:i+1,id:row.id,
+        text:row.innerText,
         stem:row.querySelector(stemSelector)?.innerText || '',
         fields:fields(row).map(n => ({...signature(n),
           label:n.closest('label')?.innerText.trim() || null,
